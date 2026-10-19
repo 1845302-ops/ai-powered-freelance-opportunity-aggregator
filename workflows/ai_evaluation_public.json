@@ -1,0 +1,219 @@
+{
+  "name": "AI-Powered Freelance Opportunity Aggregator — AI Evaluation / Semantic Filter",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -64
+      ],
+      "id": "24e5b653-3ff9-457a-9fc3-624fa05064d9",
+      "name": "ManualTrigger"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{\nJSON.stringify({\n  opportunity_id: $json.id,\n  title: $json.title,\n  description: $json.description,\n  opportunity_type: $json.opportunity_type,\n  employment_type: $json.employment_type,\n  work_mode: $json.work_mode,\n  remote_regions: $json.remote_regions,\n  location: $json.location,\n  budget_min: $json.budget_min,\n  budget_max: $json.budget_max,\n  currency: $json.currency,\n  rate_type: $json.rate_type,\n  budget_text: $json.budget_text,\n  experience_level: $json.experience_level,\n  experience_years_min: $json.experience_years_min,\n  experience_years_max: $json.experience_years_max,\n  application_method: $json.application_method\n})\n}}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are evaluating job opportunities for a candidate.\n\nYour task is NOT to decide whether the candidate is perfect for the role.\nYour task is to determine whether this opportunity deserves the candidate's attention.\n\nCandidate profile:\n\nPUBLIC REFERENCE TEMPLATE:\nReplace the placeholders below with your own candidate profile before use.\n\nCore direction:\n- [PRIMARY_DOMAIN_1]\n- [PRIMARY_DOMAIN_2]\n- [PRIMARY_DOMAIN_3]\n\nCurrent work-location context:\n- Candidate location: [CANDIDATE_LOCATION]\n- Remote-work compatibility: [YES / NO / CONDITIONAL]\n- Onsite/hybrid compatible locations: [ALLOWED_LOCATIONS]\n- Known location restrictions: [KNOWN_RESTRICTIONS]\n- Do not infer citizenship, residency, work authorization, or legal eligibility from location alone.\n\nHands-on experience includes:\n- [DEMONSTRATED_SKILL_1]\n- [DEMONSTRATED_SKILL_2]\n- [DEMONSTRATED_SKILL_3]\n- [DEMONSTRATED_SKILL_4]\n\nCANDIDATE SKILL EVIDENCE RULE:\n\nTreat only skills explicitly listed in the candidate profile as demonstrated experience.\n\nIf the posting explicitly requires an important skill or technology that is not demonstrated in the candidate profile, it may be reported as a skill gap.\n\nDo not infer generic candidate weaknesses from skills that are absent from the profile.\n\nDo not create skill gaps unless the specific opportunity provides evidence that the skill is materially required.\n\nGENERAL PRINCIPLE:\n\nFalse negatives are more harmful than false positives.\n\nThe goal is to preserve potentially useful opportunities for human review rather than reject them prematurely.\n\nUnknown information is NOT automatically negative.\n\nDo not invent missing facts.\n\n--------------------------------------------------\n1. SCOPE GATE\n--------------------------------------------------\n\nDetermine whether the core responsibilities are within the candidate's professional direction.\n\nPossible status:\n- in_scope\n- out_of_scope\n- uncertain\n\nUse out_of_scope only when the core work is clearly unrelated to the configured candidate profile and target professional direction.\n\nExamples of clearly out-of-scope work should be defined relative to the configured candidate profile.\nDo not reject mixed roles when a meaningful part of the work still matches the target direction.\n\nMixed roles or roles with a meaningful AI component are NOT automatically out of scope.\n\nIf information is insufficient to determine the role's core nature, use uncertain.\n\n--------------------------------------------------\n2. SCORING RUBRIC\n--------------------------------------------------\n\nScore each criterion from 0 to 3.\n\ntask_relevance:\n0 = almost unrelated\n1 = slightly related\n2 = mostly related\n3 = directly matches the configured target direction\n\nskill_match:\n0 = candidate can do almost none of the key tasks\n1 = partial match\n2 = good match\n3 = very strong match\n\nA score of 3 requires demonstrated evidence for nearly all major required skills.\n\nIf one or more important required technologies or skills are not demonstrated in the candidate profile, normally use 2 or lower.\n\nDo not award 3 merely because the missing skills appear learnable.\n\ngap_manageability:\n0 = fundamental skill gap\n1 = large gap\n2 = several learnable gaps\n3 = no substantial gaps\n\nrole_fit:\n0 = different professional profile\n1 = mixed profile\n2 = close to candidate's direction\n3 = directly matches the configured target professional profile\n\ndelivery_fit:\n0 = poor fit\n1 = tolerable\n2 = good fit\n3 = very good fit for MVPs, integrations, end-to-end automation or project work\n\ngrowth_value:\n0 = almost no useful experience\n1 = some value\n2 = useful\n3 = highly valuable for candidate's portfolio and professional direction\n\n--------------------------------------------------\n3. EVIDENCE RULES\n--------------------------------------------------\n\nUse the title, description, responsibilities, explicit requirements, structured work fields, and other posting text as primary evidence.\n\nThe field \"platform_skill_tags\" contains platform metadata / topical hints only.\n\nA technology listed only in \"platform_skill_tags\" is NOT a mandatory requirement unless the title, description, responsibilities, or explicit requirements support it.\n\nDo not describe platform_skill_tags as mandatory requirements.\n\nDo not infer proficiency in a programming language, framework, technical domain, or platform from adjacent or transferable experience.\n\nTransferable skills may be mentioned as strengths, but they are not equivalent to demonstrated proficiency.\n\nDo not invent:\n- infrastructure requirements\n- deployment requirements\n- programming requirements\n- frameworks\n- compliance requirements\n- MLOps requirements\n- model-training requirements\n\nunless they are explicitly stated or strongly implied by the posting's core responsibilities.\n\n--------------------------------------------------\n4. SEMANTIC BLOCKERS\n--------------------------------------------------\n\nCheck these independently.\n\ngeo_eligibility:\nAn explicit requirement to live or work in a specific country or region where the candidate is known to be ineligible.\n\nlegal_eligibility:\nAn explicit mandatory requirement involving citizenship, work authorization, security clearance, professional licence, or similar eligibility condition known to be unavailable.\n\nwork_format:\nMandatory onsite or hybrid physical presence in a location that is known to be incompatible with the candidate.\n\nhard_availability:\nAn explicit schedule, timezone, fixed-hours, or physical-presence requirement that is known to be objectively incompatible.\n\nIMPORTANT BLOCKER RULES:\n\nA semantic blocker is true ONLY when:\n- there is explicit evidence in the posting,\n- the condition is mandatory,\n- the candidate's incompatibility is known,\n- confidence is high.\n\nIf evidence is insufficient:\n- blocked must be false;\n- do NOT invent incompatibility.\n\nSkill gaps are NOT semantic blockers.\n\nCANDIDATE ELIGIBILITY RULE:\n\nDo not assume the candidate has:\n- residency\n- citizenship\n- work authorization\n- security clearance\n- professional licensing\n\nin any country unless this is explicitly provided in candidate context.\n\nIf a posting explicitly requires residence, work authorization, citizenship, clearance, or licensing, but the candidate's eligibility is unknown:\n- set blocked = false;\n- use an appropriate confidence level;\n- record the issue in uncertainty only if it meets the SIGNIFICANT UNCERTAINTY THRESHOLD below.\n\nABSENCE OF RESTRICTION IS NOT EVIDENCE OF REMOTE OR GLOBAL ELIGIBILITY:\n\nWhen no mandatory geographic or work-format restriction is stated:\n- blocked = false;\n- state only that no mandatory restriction is explicitly provided;\n- do NOT infer that the role is remote, globally available, or geographically unrestricted;\n- do NOT use platform type or typical platform behavior as evidence.\n\n--------------------------------------------------\n5. UNCERTAINTY\n--------------------------------------------------\n\nMark uncertainty.significant = true only when an unresolved fact could realistically change the candidate's decision from APPLY to SKIP, or materially affect:\n\n- eligibility,\n- mandatory work format,\n- mandatory availability,\n- whether the core role is actually within scope,\n- whether a major required skill gap makes the opportunity impractical.\n\nNormal project discovery questions are NOT significant uncertainty.\n\nMissing information is NOT automatically uncertainty.\n\nDo NOT mark uncertainty as significant merely because the posting does not specify:\n\n- exact API/provider/vendor\n- exact CRM/helpdesk\n- expected traffic or SLA\n- exact implementation architecture\n- hosting or deployment details\n- precise deliverables\n- exact technology choices\n- data availability\n- ordinary compliance considerations\n- detailed project scope\n- location\n- timezone\n- work format\n- project duration\n- salary or budget details\n\nunless the missing fact could materially change whether the candidate should pursue the opportunity.\n\nA known but unattractive fact, such as a low budget, is NOT uncertainty.\n\nUnknown information must not be treated as a negative signal.\n\nIf evidence is insufficient for a semantic blocker:\n- blocked must remain false;\n- include the issue in uncertainty.items only if it passes the SIGNIFICANT UNCERTAINTY THRESHOLD;\n- otherwise omit it.\n\nIf the opportunity is clearly relevant and there is no evidence of a blocker or major required skill mismatch, prefer:\n\nuncertainty.significant = false\n\nUNCERTAINTY OUTPUT CONSISTENCY:\n\n- uncertainty.items must contain ONLY issues that individually meet the SIGNIFICANT UNCERTAINTY THRESHOLD.\n- If uncertainty.significant = false, uncertainty.items MUST be an empty array [].\n- Questions about API providers, vendors, CRM choice, SLA, architecture, hosting, implementation details, or ordinary project setup are NOT significant uncertainty unless the posting explicitly makes them mandatory in a way that creates a known eligibility, availability, scope, or major skill conflict.\n- Do not turn a hypothetical possibility into significant uncertainty.\n\nCANDIDATE SKILL GAP VS UNCERTAINTY:\n\nA skill or technology not demonstrated in the candidate profile is a skill gap, NOT uncertainty.\n\nDo not speculate that the candidate may have unlisted experience.\n\nDo not add an item to uncertainty merely because the candidate profile does not confirm experience with a required tool, platform, vendor, or technology.\n\nRepresent such issues in skill_gaps and reflect them in skill_match / gap_manageability instead.\n\nOnly use uncertainty when an unresolved fact about the opportunity itself, eligibility, work format, availability, scope, or a genuinely ambiguous mandatory requirement could materially change the decision.\n\nHYPOTHETICAL REQUIREMENTS ARE NOT UNCERTAINTY:\n\nDo not create uncertainty from requirements that are not stated or strongly implied by the posting.\n\nDo not speculate that AI, Python, automation, or machine learning may imply:\n- model training\n- fine-tuning\n- TensorFlow / PyTorch\n- MLOps\n- deployment\n- infrastructure\n- deep-learning engineering\n\nunless the posting itself provides evidence that these are required.\n\nMissing work format, location, timezone, or schedule is NOT significant uncertainty by itself.\n\nDo not turn the mere possibility of an incompatible onsite location, schedule, or technical requirement into significant uncertainty.\n\nIf the posting contains no explicit evidence of such a restriction, omit it from uncertainty.\n\n--------------------------------------------------\n6. SKILL GAP RULES\n--------------------------------------------------\n\nReport only skill gaps that are materially relevant to this specific opportunity.\n\nInclude a skill gap only when:\n- the posting explicitly requires it, or\n- the core responsibilities strongly imply it.\n\nDo NOT list generic weaknesses from the candidate profile if the posting does not require them.\n\nDo NOT include hypothetical gaps using wording such as:\n- if required\n- if needed\n- may require\n- might require\n- possibly\n- could require\n\nDo not mention:\n- Kubernetes\n- DevOps\n- MLOps\n- deployment\n- infrastructure\n- model training\n- fine-tuning\n- specific frameworks\n\nunless the posting itself provides evidence that they matter to the role.\n\nPlatform skill tags alone are not sufficient evidence for a skill gap.\n\nPLATFORM TAG HARD RULE:\n\nNEVER create a skill_gap from platform_skill_tags alone.\n\nIf a technology, framework, platform, or skill appears only in platform_skill_tags and is not supported by the title, description, responsibilities, or explicit requirements, OMIT it from skill_gaps.\n\nDo not use wording such as \"listed in the tags\" or \"mentioned in platform tags\" as evidence of a candidate skill gap.\n\nIf a potential gap depends on an unstated hypothetical requirement, omit it from skill_gaps.\n\nHARD RULE:\n\nNever include a skill gap that depends on a hypothetical condition.\n\nIf the explanation would require wording such as \"if required\", \"if needed\", \"may require\", \"might require\", \"possibly\", or \"could require\", OMIT the gap entirely.\n\nA skill gap must be supported by an explicit requirement or by a core responsibility that clearly requires that skill.\n\nDo not infer ML/MLOps, model training, deployment, infrastructure, or deep-learning framework requirements merely because the opportunity mentions AI, Python, automation, or machine learning generally.\n\n--------------------------------------------------\n6A. STRENGTH RULES\n--------------------------------------------------\n\nReport only strengths that are materially relevant to this specific opportunity.\n\nA strength must be supported by the candidate profile.\n\nDo NOT infer candidate experience merely because the posting requires a skill or deliverable.\n\nDo NOT present a posting requirement as a candidate strength.\n\nPrefer demonstrated candidate experience that directly helps with the core work.\n\nDo not list adjacent skills such as RAG, agents, scraping, databases, or other tools unless they materially help with this specific opportunity.\n\nIf the candidate profile does not explicitly demonstrate a required technology, do not claim direct experience with it.\n\n--------------------------------------------------\n7. SUMMARY RULES\n--------------------------------------------------\n\nThe summary must be descriptive, not prescriptive.\n\nDo not recommend:\n- applying\n- contacting the client\n- skipping\n- rejecting\n- taking any action\n\nDo not use phrases equivalent to:\n- \"I recommend\"\n- \"worth applying\"\n- \"should contact\"\n- \"should skip\"\n- \"should apply\"\n\nFinal APPLY / REVIEW / SKIP will be determined by the workflow, not by you.\n\nSUMMARY CONSISTENCY:\n\nIf uncertainty.significant = false, do not describe candidate skill gaps as \"uncertainty\", \"unknown\", or an unresolved question.\n\nDescribe confirmed candidate-profile mismatches as skill gaps.\n\nDo not mention requirements in the summary if they are supported only by platform_skill_tags.\n\n--------------------------------------------------\n8. OUTPUT BREVITY RULES\n--------------------------------------------------\n\nKeep the output concise and decision-relevant.\n\n- uncertainty.items: maximum 3 items\n- strengths: maximum 4 items\n- skill_gaps: maximum 3 items\n- summary: maximum 3 concise sentences\n\nPrefer the most important evidence over exhaustive lists.\n\n--------------------------------------------------\n9. OUTPUT\n--------------------------------------------------\n\nReturn only data matching the required structured output schema.\n\nAll output fields are required.\n\nReasons and summary must be concise and written in the configured output language (default: English).\n\nIf there is no reason to report for a reason field, return an empty string.\n\nNever omit required fields.\n\nDo not calculate total_score.\n\nDo not return APPLY / REVIEW / SKIP.\n\nThe workflow will calculate the final decision deterministically later."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        208,
+        -64
+      ],
+      "id": "1c336b6f-8b66-498d-b548-03c677781dd7",
+      "name": "AI Evaluation v1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        128
+      ],
+      "id": "b79bc6a3-7778-4854-bdfe-da0bd92fbb5a",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"opportunity_id\": {\n      \"type\": \"string\"\n    },\n    \"scope_gate\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"status\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"in_scope\",\n            \"out_of_scope\",\n            \"uncertain\"\n          ]\n        },\n        \"confidence\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"high\",\n            \"medium\",\n            \"low\"\n          ]\n        },\n        \"reason\": {\n          \"type\": \"string\"\n        }\n      },\n      \"required\": [\n        \"status\",\n        \"confidence\",\n        \"reason\"\n      ]\n    },\n    \"scores\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"task_relevance\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        },\n        \"skill_match\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        },\n        \"gap_manageability\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        },\n        \"role_fit\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        },\n        \"delivery_fit\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        },\n        \"growth_value\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 3\n        }\n      },\n      \"required\": [\n        \"task_relevance\",\n        \"skill_match\",\n        \"gap_manageability\",\n        \"role_fit\",\n        \"delivery_fit\",\n        \"growth_value\"\n      ]\n    },\n    \"semantic_blockers\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"geo_eligibility\": {\n          \"type\": \"object\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"blocked\": {\n              \"type\": \"boolean\"\n            },\n            \"confidence\": {\n              \"type\": \"string\",\n              \"enum\": [\n                \"high\",\n                \"medium\",\n                \"low\"\n              ]\n            },\n            \"reason\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"blocked\",\n            \"confidence\",\n            \"reason\"\n          ]\n        },\n        \"legal_eligibility\": {\n          \"type\": \"object\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"blocked\": {\n              \"type\": \"boolean\"\n            },\n            \"confidence\": {\n              \"type\": \"string\",\n              \"enum\": [\n                \"high\",\n                \"medium\",\n                \"low\"\n              ]\n            },\n            \"reason\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"blocked\",\n            \"confidence\",\n            \"reason\"\n          ]\n        },\n        \"work_format\": {\n          \"type\": \"object\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"blocked\": {\n              \"type\": \"boolean\"\n            },\n            \"confidence\": {\n              \"type\": \"string\",\n              \"enum\": [\n                \"high\",\n                \"medium\",\n                \"low\"\n              ]\n            },\n            \"reason\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"blocked\",\n            \"confidence\",\n            \"reason\"\n          ]\n        },\n        \"hard_availability\": {\n          \"type\": \"object\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"blocked\": {\n              \"type\": \"boolean\"\n            },\n            \"confidence\": {\n              \"type\": \"string\",\n              \"enum\": [\n                \"high\",\n                \"medium\",\n                \"low\"\n              ]\n            },\n            \"reason\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"blocked\",\n            \"confidence\",\n            \"reason\"\n          ]\n        }\n      },\n      \"required\": [\n        \"geo_eligibility\",\n        \"legal_eligibility\",\n        \"work_format\",\n        \"hard_availability\"\n      ]\n    },\n    \"uncertainty\": {\n      \"type\": \"object\",\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"significant\": {\n          \"type\": \"boolean\"\n        },\n        \"items\": {\n  \"type\": \"array\",\n  \"maxItems\": 3,\n  \"items\": {\n    \"type\": \"string\"\n  }\n}\n      },\n      \"required\": [\n        \"significant\",\n        \"items\"\n      ]\n    },\n    \"strengths\": {\n  \"type\": \"array\",\n  \"maxItems\": 4,\n  \"items\": {\n    \"type\": \"string\"\n  }\n},\n    \"skill_gaps\": {\n  \"type\": \"array\",\n  \"maxItems\": 3,\n  \"items\": {\n    \"type\": \"string\"\n  }\n},\n    \"summary\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"opportunity_id\",\n    \"scope_gate\",\n    \"scores\",\n    \"semantic_blockers\",\n    \"uncertainty\",\n    \"strengths\",\n    \"skill_gaps\",\n    \"summary\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        352,
+        128
+      ],
+      "id": "3a78bae9-6d4c-4d40-81bb-90b59223a661",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const evaluation = $json.output ?? $json;\n\nconst scores = evaluation.scores;\n\nconst totalScore =\n  scores.task_relevance +\n  scores.skill_match +\n  scores.gap_manageability +\n  scores.role_fit +\n  scores.delivery_fit +\n  scores.growth_value;\n\nconst scopeOut =\n  evaluation.scope_gate.status === 'out_of_scope' &&\n  evaluation.scope_gate.confidence === 'high';\n\nconst hasHighConfidenceBlocker =\n  Object.values(evaluation.semantic_blockers).some(\n    blocker =>\n      blocker.blocked === true &&\n      blocker.confidence === 'high'\n  );\n\nconst hasSignificantUncertainty =\n  evaluation.uncertainty.significant === true;\n\nconst scopeNeedsReview =\n  evaluation.scope_gate.status === 'uncertain' ||\n  (\n    evaluation.scope_gate.status === 'out_of_scope' &&\n    evaluation.scope_gate.confidence !== 'high'\n  );\n\nlet decision;\n\nif (scopeOut) {\n  decision = 'SKIP';\n} else if (hasHighConfidenceBlocker) {\n  decision = 'SKIP';\n} else if (scopeNeedsReview) {\n  decision = 'REVIEW';\n} else if (hasSignificantUncertainty) {\n  decision = 'REVIEW';\n} else if (\n  totalScore >= 14 &&\n  scores.skill_match >= 2 &&\n  scores.gap_manageability >= 2\n) {\n  decision = 'APPLY';\n} else if (totalScore >= 9) {\n  decision = 'REVIEW';\n} else {\n  decision = 'SKIP';\n}\n\nreturn {\n  json: {\n    ...evaluation,\n    total_score: totalScore,\n    decision\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -64
+      ],
+      "id": "cceb3d4e-2c01-4836-bbb7-fffce8b0eb28",
+      "name": "Decision Engine v1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.opportunity_ai_evaluations (\n    opportunity_id,\n    evaluation_version,\n    scope_status,\n    scope_confidence,\n    scope_reason,\n    task_relevance,\n    skill_match,\n    gap_manageability,\n    role_fit,\n    delivery_fit,\n    growth_value,\n    semantic_blockers,\n    uncertainty,\n    strengths,\n    skill_gaps,\n    summary,\n    total_score,\n    decision\n)\nVALUES (\n    $1,\n    'v1.8',\n    $2,\n    $3,\n    $4,\n    $5,\n    $6,\n    $7,\n    $8,\n    $9,\n    $10,\n    $11::jsonb,\n    $12::jsonb,\n    $13::jsonb,\n    $14::jsonb,\n    $15,\n    $16,\n    $17\n)\nON CONFLICT (opportunity_id, evaluation_version)\nDO UPDATE SET\n    scope_status = EXCLUDED.scope_status,\n    scope_confidence = EXCLUDED.scope_confidence,\n    scope_reason = EXCLUDED.scope_reason,\n    task_relevance = EXCLUDED.task_relevance,\n    skill_match = EXCLUDED.skill_match,\n    gap_manageability = EXCLUDED.gap_manageability,\n    role_fit = EXCLUDED.role_fit,\n    delivery_fit = EXCLUDED.delivery_fit,\n    growth_value = EXCLUDED.growth_value,\n    semantic_blockers = EXCLUDED.semantic_blockers,\n    uncertainty = EXCLUDED.uncertainty,\n    strengths = EXCLUDED.strengths,\n    skill_gaps = EXCLUDED.skill_gaps,\n    summary = EXCLUDED.summary,\n    total_score = EXCLUDED.total_score,\n    decision = EXCLUDED.decision,\n    evaluated_at = NOW()\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [   $json.opportunity_id,   $json.scope_gate.status,   $json.scope_gate.confidence,   $json.scope_gate.reason,    $json.scores.task_relevance,   $json.scores.skill_match,   $json.scores.gap_manageability,   $json.scores.role_fit,   $json.scores.delivery_fit,   $json.scores.growth_value,    JSON.stringify($json.semantic_blockers),   JSON.stringify($json.uncertainty),   JSON.stringify($json.strengths),   JSON.stringify($json.skill_gaps),    $json.summary,   $json.total_score,   $json.decision ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        800,
+        -64
+      ],
+      "id": "9eb36ade-b2ee-4c66-a9e1-cea8b570793f",
+      "name": "Save AI Evaluation v1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT o.*\nFROM public.opportunities o\n\nLEFT JOIN public.opportunity_ai_evaluations e\n  ON e.opportunity_id = o.id\n  AND e.evaluation_version = 'v1.8'\n\nWHERE o.hard_filter_status = 'pass'\n  AND o.hard_filter_version = 'v1.6'\n  AND e.id IS NULL\n\nORDER BY o.id ASC\nLIMIT 20;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -16,
+        -64
+      ],
+      "id": "882c1ac7-4900-48bc-8191-cbaeaea80422",
+      "name": "Execute a SQL query SELECT",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        112
+      ],
+      "id": "094c9897-4edf-455b-8d49-4d069cee6910",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "ManualTrigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query SELECT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Evaluation v1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Evaluation v1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Evaluation v1": {
+      "main": [
+        [
+          {
+            "node": "Decision Engine v1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Engine v1": {
+      "main": [
+        [
+          {
+            "node": "Save AI Evaluation v1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query SELECT": {
+      "main": [
+        [
+          {
+            "node": "AI Evaluation v1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query SELECT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

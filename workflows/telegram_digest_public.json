@@ -1,0 +1,183 @@
+{
+  "name": "AI-Powered Freelance Opportunity Aggregator — Telegram Daily Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    e.id AS evaluation_id,\n    o.id AS opportunity_id,\n\n    o.source,\n    o.title,\n    o.url,\n    o.budget_text,\n    o.opportunity_type,\n    o.employment_type,\n    o.work_mode,\n    o.location,\n\n    e.decision,\n    e.total_score,\n    e.scope_status,\n    e.scope_confidence,\n    e.summary,\n    e.strengths,\n    e.skill_gaps,\n    e.uncertainty\n\nFROM public.opportunity_ai_evaluations e\n\nJOIN public.opportunities o\n    ON o.id = e.opportunity_id\n\nLEFT JOIN public.opportunity_delivery_log d\n    ON d.evaluation_id = e.id\n    AND d.channel = 'telegram'\n\nWHERE e.evaluation_version = 'v1.8'\n  AND e.decision IN ('APPLY', 'REVIEW')\n  AND d.id IS NULL\n\nORDER BY\n    CASE\n        WHEN e.decision = 'APPLY' THEN 1\n        WHEN e.decision = 'REVIEW' THEN 2\n        ELSE 3\n    END,\n    e.total_score DESC,\n    e.evaluated_at DESC\n\nLIMIT 10;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        176,
+        0
+      ],
+      "id": "6a9d46ee-a88c-4b29-83f5-5da11f76df66",
+      "name": "Select Daily Candidates",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(item => item.json);\n\nfunction clean(value) {\n  if (value === null || value === undefined || value === '') {\n    return null;\n  }\n\n  return String(value).trim();\n}\n\nfunction firstSentence(text) {\n  if (!text) return null;\n\n  const cleaned = String(text).replace(/\\s+/g, ' ').trim();\n\n  const match = cleaned.match(/^.*?[.!?](?:\\s|$)/);\n\n  if (match) {\n    return match[0].trim();\n  }\n\n  return cleaned.length > 220\n    ? cleaned.slice(0, 217) + '...'\n    : cleaned;\n}\n\nfunction formatOpportunity(item, index) {\n  const decisionEmoji =\n    item.decision === 'APPLY'\n      ? '🟢'\n      : item.decision === 'REVIEW'\n      ? '🟡'\n      : '⚪';\n\n  const source = clean(item.source);\n  const budget = clean(item.budget_text);\n  const location = clean(item.location);\n  const workMode = clean(item.work_mode);\n\n  const meta = [\n    source,\n    budget,\n    location,\n    workMode && workMode !== 'unknown' ? workMode : null\n  ]\n    .filter(Boolean)\n    .join(' • ');\n\n  const summary = firstSentence(item.summary);\n\n  return [\n    `${decisionEmoji} ${index}. ${item.title}`,\n    `${item.decision} • ${item.total_score}/18`,\n    meta || null,\n    summary || null,\n    item.url\n  ]\n    .filter(Boolean)\n    .join('\\n');\n}\n\nconst applyItems = items.filter(item => item.decision === 'APPLY');\nconst reviewItems = items.filter(item => item.decision === 'REVIEW');\n\nconst sections = [];\n\nif (applyItems.length > 0) {\n  const formatted = applyItems.map((item, index) =>\n    formatOpportunity(item, index + 1)\n  );\n\n  sections.push(\n    `🚀 APPLY — ${applyItems.length}\\n\\n${formatted.join('\\n\\n')}`\n  );\n}\n\nif (reviewItems.length > 0) {\n  const formatted = reviewItems.map((item, index) =>\n    formatOpportunity(item, applyItems.length + index + 1)\n  );\n\n  sections.push(\n    `👀 REVIEW — ${reviewItems.length}\\n\\n${formatted.join('\\n\\n')}`\n  );\n}\n\nconst header =\n  `📌 AI / Automation Opportunities\\n` +\n  `Найдено: ${items.length} • APPLY: ${applyItems.length} • REVIEW: ${reviewItems.length}`;\n\nconst fullMessage =\n  `${header}\\n\\n${sections.join('\\n\\n──────────\\n\\n')}`;\n\n// Telegram limit is 4096 characters.\n// Keep some safety margin.\nconst MAX_LENGTH = 3800;\n\nconst messages = [];\n\nif (fullMessage.length <= MAX_LENGTH) {\n  messages.push(fullMessage);\n} else {\n  let current = header;\n\n  const blocks = [];\n\n  if (applyItems.length > 0) {\n    blocks.push(`🚀 APPLY — ${applyItems.length}`);\n\n    applyItems.forEach((item, index) => {\n      blocks.push(formatOpportunity(item, index + 1));\n    });\n  }\n\n  if (reviewItems.length > 0) {\n    blocks.push(`👀 REVIEW — ${reviewItems.length}`);\n\n    reviewItems.forEach((item, index) => {\n      blocks.push(\n        formatOpportunity(\n          item,\n          applyItems.length + index + 1\n        )\n      );\n    });\n  }\n\n  for (const block of blocks) {\n    const candidate = `${current}\\n\\n${block}`;\n\n    if (candidate.length > MAX_LENGTH) {\n      messages.push(current);\n      current = block;\n    } else {\n      current = candidate;\n    }\n  }\n\n  if (current) {\n    messages.push(current);\n  }\n}\n\nreturn messages.map((message, index) => ({\n  json: {\n    message,\n    message_part: index + 1,\n    message_parts_total: messages.length,\n\n    delivered_evaluations:\n      index === messages.length - 1\n        ? items.map(item => ({\n            evaluation_id: item.evaluation_id,\n            opportunity_id: item.opportunity_id,\n            decision: item.decision,\n            total_score: item.total_score\n          }))\n        : []\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        0
+      ],
+      "id": "766a7d4a-4521-495b-b15c-de89f3db67df",
+      "name": "Build Telegram Digest"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        0
+      ],
+      "id": "0aa455cc-a8c9-4620-91a2-876b69f748f0",
+      "name": "Send Telegram Digest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const digestItems = $('Build Telegram Digest').all();\n\nconst delivered = digestItems.flatMap(\n  item => item.json.delivered_evaluations ?? []\n);\n\nreturn delivered.map(item => ({\n  json: {\n    evaluation_id: item.evaluation_id,\n    opportunity_id: item.opportunity_id,\n    decision: item.decision,\n    total_score: item.total_score\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        0
+      ],
+      "id": "d1da1e8f-4899-4f75-8f15-3342b3aedfe7",
+      "name": "Prepare Delivery Log"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.opportunity_delivery_log (\n    evaluation_id,\n    opportunity_id,\n    channel,\n    decision_at_delivery,\n    total_score_at_delivery\n)\nVALUES (\n    $1,\n    $2,\n    'telegram',\n    $3,\n    $4\n)\nON CONFLICT (evaluation_id, channel)\nDO NOTHING\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [   $json.evaluation_id,   $json.opportunity_id,   $json.decision,   $json.total_score ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        944,
+        0
+      ],
+      "id": "409c64c7-1d0e-443b-8f85-913bdd786347",
+      "name": "Log Telegram Delivery"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        192
+      ],
+      "id": "ea1d7123-535b-45bd-9833-9004102a562a",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "837892bb-3c1c-4bbb-8c0b-33a4cd86900e",
+      "name": "Manual Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Select Daily Candidates": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Digest": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Digest": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delivery Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delivery Log": {
+      "main": [
+        [
+          {
+            "node": "Log Telegram Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Select Daily Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Select Daily Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "UTC",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

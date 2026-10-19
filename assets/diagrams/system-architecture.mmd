@@ -1,0 +1,25 @@
+flowchart TB
+
+    A["Daily Schedule Trigger"]
+    B["Discovery Layer<br/>8 source-specific workflows<br/><br/>APIs · Feeds · Structured Web Data · Email"]
+    C["Merge / Synchronization"]
+    D["Deterministic Hard Filter"]
+    E["Semantic AI Evaluation<br/>Structured LLM Output"]
+    F["Deterministic Decision Engine<br/>APPLY · REVIEW · SKIP"]
+    G["Telegram Daily Digest<br/>Prioritized Delivery"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+
+    G ~~~ DB
+
+    DB[("PostgreSQL — Persistent State<br/><br/>Opportunities · AI Evaluations<br/>Delivery State · Processing State")]
+
+    B -. "normalize & upsert" .-> DB
+    D -. "processing state" .-> DB
+    F -. "evaluation & decision state" .-> DB
+    G -. "delivery log" .-> DB
