@@ -18,13 +18,17 @@ The architecture was designed around several practical requirements:
 - make repeated executions safe through deduplication and persisted processing state;
 - allow individual layers to be modified or reprocessed without rebuilding the entire pipeline.
 
-These requirements led to a layered architecture composed of 12 coordinated workflows:
+These requirements led to a layered architecture composed of 14 coordinated workflows:
 
 - 8 source-specific discovery workflows;
 - 1 Daily Orchestrator;
 - 1 Hard Filter workflow;
 - 1 AI Evaluation / Semantic Filter workflow;
-- 1 Telegram Daily Digest workflow.
+- 1 Telegram Daily Digest workflow;
+- 1 DB Housekeeping workflow;
+- 1 SKIP Audit workflow.
+
+The daily production pipeline and the operational support workflows are intentionally separated. Discovery, filtering, semantic evaluation, and delivery belong to the main daily path, while database maintenance and decision-quality auditing run independently on their own schedules.
 
 ## Architectural Layers
 
@@ -51,6 +55,10 @@ Once an opportunity has been normalized and persisted, the rest of the system op
 The Daily Orchestrator coordinates the production execution sequence.
 
 It triggers the eight discovery workflows and waits for them to complete before starting shared downstream processing.
+
+Each discovery call is configured as an independent failure boundary. If one source-specific workflow fails, the error is surfaced as a regular completion result rather than terminating the parent orchestration run. The remaining discovery workflows can finish normally, the synchronization stage can complete, and downstream processing continues against the data successfully persisted by the available sources.
+
+This behavior keeps partial source outages from disabling the entire daily pipeline while preserving source-level observability for troubleshooting.
 
 The discovery branches converge through a Merge node, but the Merge node is primarily used as a synchronization barrier rather than as the main data transport mechanism.
 
@@ -98,6 +106,12 @@ Hard-filter results are stored alongside the opportunity so that filtering does 
 Semantic evaluation is stored separately from the opportunity itself.
 This separation allows evaluation logic to be versioned independently from collected data.
 A single opportunity can therefore be re-evaluated using a newer evaluation version without silently overwriting the historical result.
+
+Each evaluation also stores provenance metadata alongside the structured semantic result. The persisted record includes the evaluation version, model name, prompt version, raw structured model response, and evaluation timestamp.
+
+This separates the model's original interpretation from the deterministic Decision Engine output and makes later comparison, debugging, and re-evaluation easier.
+
+The semantic evaluation layer also has an explicit failure path. If model execution or structured-output parsing fails, the record is routed through a fallback transformation that produces a REVIEW decision with low-confidence scope state and explicit uncertainty metadata. Failed or malformed AI output therefore cannot silently become a SKIP.
 
 ### Delivery Log
 
@@ -155,12 +169,17 @@ The same principle applies to delivery state: already delivered evaluations are 
 
 ## Failure Boundaries
 
-The system is intentionally divided into separate workflow boundaries so that failures remain easier to identify and diagnose.
+The system uses different failure policies depending on the responsibility of each layer.
 
-Core sub-workflows are executed with completion waiting enabled. Downstream stages therefore do not begin until required upstream processing has completed.
+Source-specific discovery workflows are isolated at the Daily Orchestrator boundary. A failure in one discovery source does not terminate the remaining source branches or prevent downstream processing from continuing with data already persisted by successful workflows.
 
-Critical failures stop the processing chain instead of allowing later stages to continue against incomplete state.
-At the same time, persistence in PostgreSQL means that successfully completed earlier work is not dependent on one continuous in-memory execution.
+Transient failures in network-dependent discovery and database operations use bounded retry behavior where appropriate.
+
+The AI Evaluation workflow uses a separate error path for malformed or failed semantic evaluations. Instead of silently dropping the opportunity or classifying it as SKIP, the failure is transformed into an explicit REVIEW result with uncertainty metadata and can be persisted through the normal evaluation storage path.
+
+Operational support workflows are also isolated from the daily production pipeline. DB Housekeeping and SKIP Audit run independently, so a maintenance or quality-control failure cannot interrupt daily opportunity discovery, filtering, evaluation, or delivery.
+
+PostgreSQL remains the persistent recovery boundary across these workflows. Successfully completed work is retained even when another integration or workflow fails later in the process.
 
 ## Extensibility
 

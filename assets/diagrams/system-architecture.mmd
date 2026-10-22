@@ -1,25 +1,42 @@
 flowchart TB
 
-    A["Daily Schedule Trigger"]
-    B["Discovery Layer<br/>8 source-specific workflows<br/><br/>APIs · Feeds · Structured Web Data · Email"]
-    C["Merge / Synchronization"]
-    D["Deterministic Hard Filter"]
-    E["Semantic AI Evaluation<br/>Structured LLM Output"]
-    F["Deterministic Decision Engine<br/>APPLY · REVIEW · SKIP"]
-    G["Telegram Daily Digest<br/>Prioritized Delivery"]
+    subgraph DAILY["Daily Production Pipeline"]
+        A["Daily Schedule Trigger"]
+        B["Discovery Layer<br/>8 source-specific workflows<br/>Independent failure boundaries<br/><br/>APIs · Feeds · Structured Web Data · Email"]
+        C["Merge / Synchronization"]
+        D["Deterministic Hard Filter"]
+        E["Semantic AI Evaluation<br/>Structured LLM Output"]
+        F["Deterministic Decision Engine<br/>APPLY · REVIEW · SKIP"]
+        R["Fallback → REVIEW<br/>AI / structured-output failure"]
+        G["Telegram Daily Digest<br/>Prioritized Delivery"]
 
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
+        A --> B
+        B --> C
+        C --> D
+        D --> E
 
-    G ~~~ DB
+        E -->|valid structured output| F
+        E -.->|error / malformed output| R
+
+        F --> G
+        R --> G
+    end
 
     DB[("PostgreSQL — Persistent State<br/><br/>Opportunities · AI Evaluations<br/>Delivery State · Processing State")]
 
     B -. "normalize & upsert" .-> DB
     D -. "processing state" .-> DB
-    F -. "evaluation & decision state" .-> DB
+    F -. "evaluation + provenance + decision" .-> DB
+    R -. "fallback REVIEW + error metadata" .-> DB
     G -. "delivery log" .-> DB
+
+    subgraph OPS["Independent Weekly Operations"]
+        H["DB Housekeeping<br/>180-day retention<br/>Count → Guard → Delete"]
+        I["SKIP Audit<br/>Borderline + random sample<br/>False-negative quality control"]
+        J["Telegram Weekly Audit Digest"]
+
+        I --> J
+    end
+
+    H -. "retention check & cleanup" .-> DB
+    DB -. "sample stored SKIP decisions" .-> I

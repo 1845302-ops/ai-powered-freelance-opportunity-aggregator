@@ -1,0 +1,138 @@
+{
+  "name": "AI-Powered Freelance Opportunity Aggregator — DB Housekeeping",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 17
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e3654d03-15b9-4374-bcd6-8826e0c6b682",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c811f1b1-e73a-45f0-b213-2ad604d0ee11",
+              "leftValue": "={{ Number($json.rows_to_delete) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "05100a4f-0a86-4cf0-8ad4-5f86034c0370",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH deleted AS (\n  DELETE FROM public.opportunities\n  WHERE discovered_at < NOW() - INTERVAL '180 days'\n  RETURNING id\n)\nSELECT COUNT(*)::int AS deleted_rows\nFROM deleted;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        -144
+      ],
+      "id": "cbb7e1e0-b9e8-421c-996c-da4a693c68e4",
+      "name": "Delete Opportunities Older Than 180 Days"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS rows_to_delete\nFROM public.opportunities\nWHERE discovered_at < NOW() - INTERVAL '180 days';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        192,
+        0
+      ],
+      "id": "eff92498-ab26-435d-83c1-8fffe8536a8c",
+      "name": "Count Opportunities Older Than 180 Days"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Count Opportunities Older Than 180 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Delete Opportunities Older Than 180 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Opportunities Older Than 180 Days": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "UTC",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}

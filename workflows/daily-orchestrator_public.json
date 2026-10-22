@@ -138,37 +138,8 @@
       ],
       "id": "acef6073-df6c-4530-ae34-076bff92bab5",
       "name": "Call 'Source 01 Discovery'",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "SOURCE_02_WORKFLOW_ID",
-          "mode": "list",
-          "cachedResultName": "Source 02 Discovery"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {},
-          "matchingColumns": [],
-          "schema": [],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.3,
-      "position": [
-        -816,
-        -512
-      ],
-      "id": "873c3dc8-cba4-491c-a4f9-8b41cd57f597",
-      "name": "Call 'Source 02 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -211,7 +182,8 @@
       ],
       "id": "a655a5fd-3fbb-47af-995f-c847043b4441",
       "name": "Call 'Source 03 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -241,7 +213,8 @@
       ],
       "id": "04962549-c4a2-430d-9a43-4eb72541f8a0",
       "name": "Call 'Source 04 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -271,7 +244,8 @@
       ],
       "id": "f2485448-d201-4e31-bbdb-d5f98784c59f",
       "name": "Call 'Source 05 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -301,7 +275,8 @@
       ],
       "id": "5c0c74a8-16f7-4402-a8c9-961ce633f5d6",
       "name": "Call 'Source 06 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -331,7 +306,8 @@
       ],
       "id": "658493a1-731e-4b6f-93eb-5d23c9ddca48",
       "name": "Call 'Source 07 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -361,7 +337,39 @@
       ],
       "id": "efbc1da2-3b53-4511-a193-a1722b61855e",
       "name": "Call 'Source 08 Discovery'",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "SOURCE_02_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "Source 02 Discovery"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -816,
+        -512
+      ],
+      "id": "873c3dc8-cba4-491c-a4f9-8b41cd57f597",
+      "name": "Call 'Source 02 Discovery'",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -445,17 +453,6 @@
         ]
       ]
     },
-    "Call 'Source 02 Discovery'": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
     "Merge": {
       "main": [
         [
@@ -529,6 +526,17 @@
             "node": "Merge",
             "type": "main",
             "index": 7
+          }
+        ]
+      ]
+    },
+    "Call 'Source 02 Discovery'": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
           }
         ]
       ]

@@ -16,7 +16,7 @@ A multi-source opportunity intelligence system built with n8n and PostgreSQL to 
 
 The system integrates 8 different sources using REST APIs, RSS feeds, GraphQL, HTML extraction, and email-based ingestion. Opportunities are normalized into a unified data model, filtered through deterministic hard rules, evaluated with an LLM, and classified as APPLY, REVIEW, or SKIP using a separate decision layer.
 
-The project consists of 12 coordinated n8n workflows and runs automatically on a daily schedule. The highest-priority opportunities are delivered through a Telegram digest, with delivery logging and duplicate prevention to avoid repeated recommendations.
+The project consists of 14 coordinated n8n workflows: 8 source-specific discovery workflows, 4 core processing workflows, and 2 operational support workflows for database maintenance and decision-quality auditing. The main opportunity pipeline runs on a daily schedule, while maintenance and quality-control workflows run independently on a weekly schedule. The highest-priority opportunities are delivered through a Telegram digest, with delivery logging and duplicate prevention to avoid repeated recommendations.
 
 ## Problem
 
@@ -74,7 +74,11 @@ Based on this analysis, the system was divided into independent discovery workfl
 
 The system uses a modular, layered architecture that separates source-specific data collection from shared filtering, evaluation, storage, and delivery logic.
 
-The project is composed of 12 coordinated n8n workflows: 8 source-specific discovery workflows and 4 core workflows responsible for orchestration, filtering, AI evaluation, and delivery.
+The project is composed of 14 coordinated n8n workflows: 8 source-specific discovery workflows, 4 core workflows responsible for orchestration, filtering, AI evaluation, and delivery, and 2 independent operational workflows for database housekeeping and decision-quality auditing.
+
+Discovery workflows are isolated from one another at the orchestration layer. A failure in one source-specific workflow is surfaced as an error result without stopping the remaining discovery branches, allowing downstream filtering, evaluation, and delivery to continue using successfully persisted data from the available sources.
+
+Operational maintenance is intentionally separated from the daily pipeline. Database housekeeping manages long-term data retention, while a weekly SKIP audit samples rejected opportunities for human review to detect potential false negatives.
 
 
 ![System Architecture](assets/diagrams/system-architecture.svg)
@@ -187,6 +191,10 @@ The LLM does not produce the final APPLY / REVIEW / SKIP decision.
 Its role is limited to semantic interpretation and structured assessment of information that is difficult to evaluate reliably with deterministic rules alone.
 To improve consistency, the evaluation layer uses a strict structured-output schema and separates confirmed skill gaps from unknown or hypothetical requirements.
 
+Each stored AI evaluation also records model provenance, including the model name, prompt version, and the raw structured response produced before deterministic classification. This makes evaluations reproducible and easier to compare as prompts or models evolve.
+
+Malformed or failed AI evaluations are not silently discarded. Errors are routed through a fallback path that produces a REVIEW decision with explicit uncertainty metadata, ensuring that an unreliable model response cannot automatically eliminate a potentially relevant opportunity.
+
 **3. Deterministic Decision Engine**
 
 The structured AI evaluation is passed to a separate deterministic decision layer.
@@ -255,15 +263,20 @@ This separation of concerns makes the pipeline easier to debug, reprocess, audit
 
 ## Reliability & Cost Control
 
-The production workflow includes several operational safeguards to keep execution predictable and costs under control.
+The production system includes several operational safeguards to keep execution predictable, resilient, and cost-controlled.
 
 - **Bounded AI processing:** semantic evaluation is limited to 20 opportunities per run to prevent unexpectedly large batches of LLM calls.
 - **Limited daily delivery:** the Telegram digest contains up to 10 highest-priority undelivered opportunities to avoid information overload.
-- **Idempotent processing:** repeated discovery runs use database upserts and delivery-state checks so previously processed records are not unnecessarily duplicated or re-delivered.
-- **Failure-aware orchestration:** core sub-workflows wait for completion, and critical failures stop downstream processing instead of continuing with incomplete state.
+- **Idempotent processing:** discovery workflows use database upserts and delivery-state checks so repeated executions do not create unnecessary duplicates or repeated recommendations.
+- **Source-level fault isolation:** failure of one discovery workflow does not terminate the remaining discovery branches or the downstream processing pipeline.
+- **Transient-error handling:** network-dependent discovery and database operations use controlled retries where appropriate.
+- **Fail-safe AI evaluation:** malformed or failed structured AI output is routed to REVIEW instead of being silently rejected.
+- **Evaluation provenance:** model name, prompt version, raw structured response, evaluation version, and timestamps are persisted for later auditing and comparison.
+- **Database housekeeping:** a separate weekly workflow checks for opportunities older than the configured retention window before deleting them.
+- **Decision-quality auditing:** a weekly SKIP audit prioritizes potentially suspicious false negatives and supplements them with a random control sample for manual review.
 
+These controls make the system safer to rerun, easier to audit, and more resilient to partial failures without coupling maintenance tasks to the daily production pipeline.
 
-These controls make the system safer to rerun and easier to operate on a daily schedule.
 
 ## Testing & Validation
 
@@ -359,7 +372,6 @@ The repository separates public documentation, workflow definitions, and visual 
 ```text
 ai-powered-freelance-opportunity-aggregator/
 ├── README.md
-├── LICENSE
 ├── docs/
 ├── workflows/
 └── assets/
@@ -411,9 +423,9 @@ Production credentials, private candidate data, and source-specific account conf
 
 ## Project Status
 
-The system has been validated end-to-end and is currently configured for scheduled daily operation.
+The core opportunity pipeline has been validated end-to-end in scheduled daily operation. The production system also includes independent weekly workflows for database housekeeping and SKIP decision auditing.
 
-Development continues through incremental improvements to evaluation quality, operational reliability, and long-term data management.
+Current development focuses on incremental improvements to evaluation quality, observability, source resilience, and long-term operational reliability.
 
 ## License
 

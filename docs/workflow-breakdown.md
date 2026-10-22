@@ -1,6 +1,6 @@
 # Workflow Breakdown
 
-This document describes the responsibilities and interaction boundaries of the 12 n8n workflows that make up the AI-Powered Freelance Opportunity Aggregator.
+This document describes the responsibilities and interaction boundaries of the 14 n8n workflows that make up the AI-Powered Freelance Opportunity Aggregator.
 
 The system is divided into:
 
@@ -8,7 +8,9 @@ The system is divided into:
 - 1 Daily Orchestrator;
 - 1 Hard Filter workflow;
 - 1 AI Evaluation / Semantic Filter workflow;
-- 1 Telegram Daily Digest workflow.
+- 1 Telegram Daily Digest workflow;
+- 1 DB Housekeeping workflow;
+- 1 SKIP Audit workflow.
 
 Each workflow is intentionally responsible for a limited part of the system rather than combining discovery, filtering, evaluation, and delivery into one monolithic automation.
 
@@ -21,6 +23,8 @@ Each workflow is intentionally responsible for a limited part of the system rath
 | Hard Filter | 1 | Apply deterministic exclusion rules |
 | AI Evaluation / Semantic Filter | 1 | Perform structured semantic evaluation and deterministic classification |
 | Telegram Daily Digest | 1 | Select, deliver, and log prioritized opportunities |
+| DB Housekeeping | 1 | Perform scheduled retention checks and controlled cleanup |
+| SKIP Audit | 1 | Sample rejected opportunities for manual false-negative review |
 
 ---
 
@@ -50,6 +54,10 @@ Generate Deduplication Identity
     ↓
 Upsert into PostgreSQL
 ```
+
+Discovery workflows may also include source-specific resilience controls such as bounded retries, batching, dynamic resource addressing, or tolerant error handling where the external source is prone to transient failures.
+
+These controls remain local to the source-specific workflow so that integration-specific recovery behavior does not leak into the shared filtering or evaluation layers.
 
 ### Discovery Responsibilities
 
@@ -92,6 +100,12 @@ Because each Discovery workflow already persists its results to PostgreSQL, the 
 The Orchestrator therefore manages execution order rather than acting as the primary transport layer for opportunity data.
 Core sub-workflows are configured to wait for completion before the next processing stage begins.
 
+Each discovery call is also configured as an independent failure boundary.
+
+If a source-specific discovery workflow fails, the parent Orchestrator continues execution instead of terminating the full daily run. The error remains available for inspection, while successful discovery branches can complete and persist their data normally.
+
+This allows downstream processing to continue against the successfully persisted opportunity state even during a partial source outage.
+
 ## Hard Filter Workflow
 
 The Hard Filter performs deterministic screening before semantic AI evaluation.
@@ -132,12 +146,15 @@ The workflow is intentionally separated into semantic interpretation and determi
 Select Evaluation Batch
         ↓
 Structured LLM Evaluation
-        ↓
-Structured Output Parser
-        ↓
-Deterministic Decision Engine
-        ↓
-Persist Evaluation
+      ↙           ↘
+ Success          Error
+   ↓                ↓
+Structured       Fallback
+Output Parser      REVIEW
+   ↓                ↓
+Decision Engine     │
+      ↘            ↙
+       Persist Evaluation
 ```
 
 ### Evaluation Batch Selection
@@ -198,6 +215,20 @@ Because this stage is deterministic, identical structured evaluation input produ
 The completed evaluation is stored separately from the original opportunity.
 Evaluation records include their evaluation version, making it possible to test or deploy newer evaluation logic without overwriting previous results.
 
+Evaluation persistence includes provenance metadata in addition to the semantic fields and deterministic decision.
+
+Stored metadata includes:
+
+- evaluation version;
+- model name;
+- prompt version;
+- raw structured model response;
+- evaluation timestamp.
+
+The raw structured response is captured before deterministic classification, allowing the model interpretation and the Decision Engine result to be audited independently.
+
+If the LLM or structured-output parsing fails, the workflow routes the error through a fallback transformation that creates a valid `REVIEW` evaluation with explicit uncertainty metadata rather than dropping or rejecting the opportunity.
+
 ## Telegram Daily Digest Workflow
 
 The Telegram Daily Digest workflow is responsible for selecting and delivering the highest-priority evaluated opportunities that have not already been delivered.
@@ -229,6 +260,7 @@ Each digest entry may include:
 - work format or location;
 - concise evaluation summary;
 - opportunity link.
+
 ### Delivery Deduplication
 
 Successful deliveries are stored in `public.opportunity_delivery_log`
@@ -236,6 +268,52 @@ Successful deliveries are stored in `public.opportunity_delivery_log`
 Future selection queries exclude evaluations already delivered through the same channel.
 
 This prevents repeated recommendations without deleting historical delivery information.
+
+## DB Housekeeping Workflow
+
+The DB Housekeeping workflow runs independently from the daily production pipeline.
+
+Its purpose is to enforce a controlled retention policy for stale opportunity data.
+
+The workflow performs:
+
+```text
+Weekly Schedule
+      ↓
+Count Opportunities Older Than Retention Window
+      ↓
+IF rows_to_delete > 0
+      ↓
+Delete Eligible Opportunities
+```
+
+The production retention window is currently 180 days.
+
+A pre-deletion count prevents unnecessary destructive execution when no records are eligible for cleanup.
+
+Keeping housekeeping independent from the Daily Orchestrator ensures that maintenance failures cannot interrupt daily discovery, filtering, evaluation, or delivery.
+
+## SKIP Audit Workflow
+
+The SKIP Audit workflow provides a lightweight quality-control loop for deterministic and semantic rejection behavior.
+
+It runs independently on a weekly schedule.
+
+The audit prioritizes potentially suspicious `SKIP` decisions that:
+
+- are classified as `in_scope` or have relatively high scores;
+- do not contain a confirmed high-confidence semantic blocker.
+
+Up to three such borderline records are selected.
+
+The remaining audit capacity is filled with random `SKIP` records until the sample contains up to five opportunities.
+
+The selected records are formatted into a Telegram digest showing the opportunity title, score, scope state, effective reason for rejection, and source URL.
+
+If a `SKIP` was caused by a confirmed semantic blocker, the digest reports the blocker reason rather than only the general scope explanation.
+
+This workflow provides a manual false-negative check without coupling quality assurance to the daily production path.
+
 ## Workflow Boundaries
 The project intentionally uses several smaller workflows instead of a single large automation.
 This provides several operational advantages:

@@ -161,6 +161,53 @@ Deterministic program logic
 The LLM interprets the opportunity.
 The application decides what to do with that interpretation.
 
+## AI Evaluation Provenance Validation
+
+Evaluation persistence was extended to retain the provenance of each semantic assessment.
+
+Stored metadata now includes:
+
+- evaluation version;
+- model name;
+- prompt version;
+- raw structured model response;
+- evaluation timestamp.
+
+Testing verified that the raw structured response is persisted as JSON rather than as an encoded text string and remains separate from the deterministic `total_score` and final `decision`.
+
+This allows the original model interpretation to be inspected independently from the Decision Engine result and makes later prompt or model comparisons auditable.
+
+## AI Failure Fallback Testing
+
+The AI Evaluation workflow was explicitly tested against a forced evaluation failure.
+
+A controlled invalid prompt expression was introduced to cause the semantic evaluation node to fail before producing a valid structured result.
+
+The expected error path was:
+
+```text
+AI Evaluation
+    ↓ error
+Fallback Transformation
+    ↓
+REVIEW
+    ↓
+Evaluation Persistence
+```
+
+The fallback produced a valid evaluation object with:
+
+- `scope_status = uncertain`;
+- low scope confidence;
+- significant uncertainty;
+- zero placeholder scores;
+- the original evaluation error stored in `raw_response`;
+- `decision = REVIEW`.
+
+This verified that malformed or failed AI output does not silently disappear and cannot automatically become a `SKIP`.
+
+After the test, the production prompt was restored and the fallback path remained connected as the permanent failure-handling behavior.
+
 ## Decision Engine Verification
 
 The Decision Engine was tested independently from the LLM.
@@ -291,6 +338,68 @@ The delivered batch contained 10 `APPLY` opportunities because enough high-prior
 
 This also confirmed that delivery prioritization behaved as designed rather than enforcing an artificial `REVIEW` quota.
 
+## Discovery Fault-Isolation Testing
+
+The Daily Orchestrator was tested with a deliberately invalid discovery workflow reference.
+
+One discovery call was temporarily configured to target a nonexistent workflow while the remaining source-specific discovery calls retained their normal configuration.
+
+The failing branch returned an explicit workflow error, but the parent Daily Orchestrator continued processing instead of terminating.
+
+This test verified that:
+
+1. one source-specific discovery failure does not stop the remaining discovery workflows;
+2. the failed branch still produces a completion result for synchronization;
+3. downstream processing can continue against data persisted by the successful sources;
+4. the source failure remains visible for troubleshooting.
+
+The original discovery workflow reference was restored after the test.
+
+This behavior was also validated against real transient source failures during scheduled operation, where source-specific errors could be corrected without redesigning the downstream pipeline.
+
+## Operational Workflow Validation
+
+Two independent support workflows were added and tested separately from the daily production pipeline.
+
+### DB Housekeeping
+
+The database housekeeping workflow runs on a weekly schedule.
+
+Before deletion, it performs a count query for opportunities older than the configured retention window of 180 days.
+
+An IF condition allows deletion to run only when the count is greater than zero.
+
+During validation, the count returned zero records eligible for deletion, so the workflow correctly followed the non-destructive branch and no data was removed.
+
+The deletion query itself is designed to return the number of deleted rows when eligible records exist.
+
+### Weekly SKIP Audit
+
+A separate weekly quality-control workflow samples opportunities classified as `SKIP`.
+
+The audit first searches for potentially suspicious false negatives:
+
+- opportunities with `in_scope` status or relatively high scores;
+- without any confirmed high-confidence semantic blocker.
+
+Up to three such borderline records are selected.
+
+The remaining audit capacity is filled with random `SKIP` records until the sample contains up to five opportunities.
+
+The resulting sample is formatted into a Telegram digest showing:
+
+- opportunity title;
+- total score;
+- scope classification;
+- actual reason for `SKIP`;
+- source URL.
+
+When a `SKIP` is caused by a high-confidence semantic blocker, the digest reports the blocker reason rather than only the general scope explanation.
+
+End-to-end testing confirmed successful SQL selection, formatting, and Telegram delivery.
+
+In the tested production sample, no true borderline false negatives were detected, and the remaining random `SKIP` decisions were consistent with the intended candidate profile.
+
 ## Cost Validation
 Cost efficiency was treated as an architectural requirement.
 
@@ -325,6 +434,10 @@ By the end of the production testing cycle, the following behaviors had been ver
 - Telegram delivery prioritizes higher-value opportunities;
 - successfully delivered evaluations are not repeatedly shown;
 - the full pipeline can execute end-to-end on a scheduled production workflow;
+- source-specific discovery failures are isolated and do not terminate the full daily pipeline;
+- AI evaluation provenance is persisted for later debugging and comparison;
+- malformed or failed AI evaluations fall back to REVIEW rather than silent rejection;
+- weekly database maintenance and SKIP quality auditing operate independently from the daily production workflow;
 - bounded LLM usage keeps operating cost low.
 
 ## Validation Philosophy

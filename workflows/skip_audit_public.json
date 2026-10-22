@@ -1,0 +1,117 @@
+{
+  "name": "AI-Powered Freelance Opportunity Aggregator — SKIP Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4a3332c0-8371-4532-a5e7-fad3ab0e6fe4",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH risky AS (\n    SELECT\n        e.opportunity_id,\n        o.title,\n        o.url,\n        o.source,\n        e.scope_status,\n        e.scope_confidence,\n        e.scope_reason,\n        e.total_score,\n        e.summary,\n        e.skill_gaps,\n        e.semantic_blockers,\n        e.uncertainty,\n        e.evaluated_at,\n        'borderline' AS audit_type\n    FROM public.opportunity_ai_evaluations e\n    JOIN public.opportunities o\n        ON o.id = e.opportunity_id\n    WHERE e.evaluation_version = 'v1.8'\n      AND e.decision = 'SKIP'\n      AND e.evaluated_at >= NOW() - INTERVAL '7 days'\n      AND (\n          e.scope_status = 'in_scope'\n          OR e.total_score >= 9\n      )\n      AND NOT EXISTS (\n          SELECT 1\n          FROM jsonb_each(e.semantic_blockers) AS b(key, value)\n          WHERE (value->>'blocked')::boolean = true\n            AND value->>'confidence' = 'high'\n      )\n    ORDER BY RANDOM()\n    LIMIT 3\n),\n\nrandom_skips AS (\n    SELECT\n        e.opportunity_id,\n        o.title,\n        o.url,\n        o.source,\n        e.scope_status,\n        e.scope_confidence,\n        e.scope_reason,\n        e.total_score,\n        e.summary,\n        e.skill_gaps,\n        e.semantic_blockers,\n        e.uncertainty,\n        e.evaluated_at,\n        'random' AS audit_type\n    FROM public.opportunity_ai_evaluations e\n    JOIN public.opportunities o\n        ON o.id = e.opportunity_id\n    WHERE e.evaluation_version = 'v1.8'\n      AND e.decision = 'SKIP'\n      AND e.evaluated_at >= NOW() - INTERVAL '7 days'\n      AND NOT EXISTS (\n          SELECT 1\n          FROM risky r\n          WHERE r.opportunity_id = e.opportunity_id\n      )\n    ORDER BY RANDOM()\n    LIMIT (\n        SELECT GREATEST(0, 5 - COUNT(*))\n        FROM risky\n    )\n)\n\nSELECT * FROM risky\nUNION ALL\nSELECT * FROM random_skips;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "a0d8bba8-7d42-49b7-a13b-f2c9e6067dbf",
+      "name": "Execute a SQL query"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(item => item.json);\n\nconst borderline = items.filter(i => i.audit_type === 'borderline');\nconst random = items.filter(i => i.audit_type === 'random');\n\nfunction getSkipReason(item) {\n  const blockers = item.semantic_blockers ?? {};\n\n  const blocked = Object.entries(blockers)\n    .filter(([_, value]) =>\n      value?.blocked === true &&\n      value?.confidence === 'high'\n    )\n    .map(([key, value]) => {\n      const label = key.replace(/_/g, ' ');\n      return `${label}: ${value.reason}`;\n    });\n\n  if (blocked.length > 0) {\n    return blocked.join(' | ');\n  }\n\n  return item.scope_reason || item.summary || '—';\n}\n\n// Show borderline SKIPs first\nconst sorted = [...borderline, ...random];\n\nfunction truncate(text, max = 260) {\n  if (!text) return '—';\n  const clean = String(text).replace(/\\s+/g, ' ').trim();\n  return clean.length > max\n    ? clean.slice(0, max - 3) + '...'\n    : clean;\n}\n\nlet message = `🔎 WEEKLY SKIP AUDIT\\n\\n`;\n\nif (borderline.length === 0) {\n  message += `✅ No borderline SKIPs detected this week.\\n`;\n  message += `Random quality-control sample: ${random.length}\\n\\n`;\n} else {\n  message += `⚠️ Borderline SKIPs detected: ${borderline.length}\\n`;\n  message += `Random control sample: ${random.length}\\n\\n`;\n}\n\nsorted.forEach((item, index) => {\n  const icon = item.audit_type === 'borderline' ? '⚠️' : '🎲';\n  const type =\n    item.audit_type === 'borderline'\n      ? 'BORDERLINE SKIP'\n      : 'RANDOM SKIP';\n\n  message += `${icon} ${index + 1}. ${type}\\n`;\n  message += `${truncate(item.title, 120)}\\n`;\n  \n  const scopeLabel = String(item.scope_status ?? '—')\n  .replace(/_/g, ' ')\n  .toUpperCase();\n\n  message += `Score: ${item.total_score ?? '—'} | Scope: ${scopeLabel}\\n`;\n  \n  message += `Why SKIP: ${truncate(getSkipReason(item))}\\n`;\n  message += `${item.url ?? ''}\\n\\n`;\n});\n\n// Protect against Telegram message length limits\nif (message.length > 3900) {\n  message = message.slice(0, 3850) +\n    '\\n\\n⚠️ Digest truncated due to Telegram message limit.';\n}\n\nreturn [\n  {\n    json: {\n      text: message,\n      audited_count: items.length,\n      borderline_count: borderline.length,\n      random_count: random.length\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "04f52340-7f99-476c-82d7-98b41088d2ef",
+      "name": "Format SKIP Audit Digest"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "disable_web_page_preview": true
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "4264f0e1-a10b-4a54-ade1-39866439c69d",
+      "name": "Send Weekly SKIP Audit"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Format SKIP Audit Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format SKIP Audit Digest": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly SKIP Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "UTC"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

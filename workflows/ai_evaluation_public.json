@@ -33,7 +33,8 @@
         -64
       ],
       "id": "1c336b6f-8b66-498d-b548-03c677781dd7",
-      "name": "AI Evaluation v1"
+      "name": "AI Evaluation v1",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -71,7 +72,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const evaluation = $json.output ?? $json;\n\nconst scores = evaluation.scores;\n\nconst totalScore =\n  scores.task_relevance +\n  scores.skill_match +\n  scores.gap_manageability +\n  scores.role_fit +\n  scores.delivery_fit +\n  scores.growth_value;\n\nconst scopeOut =\n  evaluation.scope_gate.status === 'out_of_scope' &&\n  evaluation.scope_gate.confidence === 'high';\n\nconst hasHighConfidenceBlocker =\n  Object.values(evaluation.semantic_blockers).some(\n    blocker =>\n      blocker.blocked === true &&\n      blocker.confidence === 'high'\n  );\n\nconst hasSignificantUncertainty =\n  evaluation.uncertainty.significant === true;\n\nconst scopeNeedsReview =\n  evaluation.scope_gate.status === 'uncertain' ||\n  (\n    evaluation.scope_gate.status === 'out_of_scope' &&\n    evaluation.scope_gate.confidence !== 'high'\n  );\n\nlet decision;\n\nif (scopeOut) {\n  decision = 'SKIP';\n} else if (hasHighConfidenceBlocker) {\n  decision = 'SKIP';\n} else if (scopeNeedsReview) {\n  decision = 'REVIEW';\n} else if (hasSignificantUncertainty) {\n  decision = 'REVIEW';\n} else if (\n  totalScore >= 14 &&\n  scores.skill_match >= 2 &&\n  scores.gap_manageability >= 2\n) {\n  decision = 'APPLY';\n} else if (totalScore >= 9) {\n  decision = 'REVIEW';\n} else {\n  decision = 'SKIP';\n}\n\nreturn {\n  json: {\n    ...evaluation,\n    total_score: totalScore,\n    decision\n  }\n};"
+        "jsCode": "const evaluation = $json.output ?? $json;\n\nconst scores = evaluation.scores;\n\n// Preserve the original structured LLM response before deterministic classification\nconst rawResponse = evaluation;\n\nconst totalScore =\n  scores.task_relevance +\n  scores.skill_match +\n  scores.gap_manageability +\n  scores.role_fit +\n  scores.delivery_fit +\n  scores.growth_value;\n\nconst scopeOut =\n  evaluation.scope_gate.status === 'out_of_scope' &&\n  evaluation.scope_gate.confidence === 'high';\n\nconst hasHighConfidenceBlocker =\n  Object.values(evaluation.semantic_blockers).some(\n    blocker =>\n      blocker.blocked === true &&\n      blocker.confidence === 'high'\n  );\n\nconst hasSignificantUncertainty =\n  evaluation.uncertainty.significant === true;\n\nconst scopeNeedsReview =\n  evaluation.scope_gate.status === 'uncertain' ||\n  (\n    evaluation.scope_gate.status === 'out_of_scope' &&\n    evaluation.scope_gate.confidence !== 'high'\n  );\n\nlet decision;\n\nif (scopeOut) {\n  decision = 'SKIP';\n} else if (hasHighConfidenceBlocker) {\n  decision = 'SKIP';\n} else if (scopeNeedsReview) {\n  decision = 'REVIEW';\n} else if (hasSignificantUncertainty) {\n  decision = 'REVIEW';\n} else if (\n  totalScore >= 14 &&\n  scores.skill_match >= 2 &&\n  scores.gap_manageability >= 2\n) {\n  decision = 'APPLY';\n} else if (totalScore >= 9) {\n  decision = 'REVIEW';\n} else {\n  decision = 'SKIP';\n}\n\nreturn {\n  json: {\n    ...evaluation,\n\n    // AI evaluation provenance\n    model_name: 'gpt-5-mini',\n    prompt_version: 'semantic_prompt_v1',\n    raw_response: rawResponse,\n\n    // Deterministic Decision Engine output\n    total_score: totalScore,\n    decision\n  }\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -85,9 +86,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO public.opportunity_ai_evaluations (\n    opportunity_id,\n    evaluation_version,\n    scope_status,\n    scope_confidence,\n    scope_reason,\n    task_relevance,\n    skill_match,\n    gap_manageability,\n    role_fit,\n    delivery_fit,\n    growth_value,\n    semantic_blockers,\n    uncertainty,\n    strengths,\n    skill_gaps,\n    summary,\n    total_score,\n    decision\n)\nVALUES (\n    $1,\n    'v1.8',\n    $2,\n    $3,\n    $4,\n    $5,\n    $6,\n    $7,\n    $8,\n    $9,\n    $10,\n    $11::jsonb,\n    $12::jsonb,\n    $13::jsonb,\n    $14::jsonb,\n    $15,\n    $16,\n    $17\n)\nON CONFLICT (opportunity_id, evaluation_version)\nDO UPDATE SET\n    scope_status = EXCLUDED.scope_status,\n    scope_confidence = EXCLUDED.scope_confidence,\n    scope_reason = EXCLUDED.scope_reason,\n    task_relevance = EXCLUDED.task_relevance,\n    skill_match = EXCLUDED.skill_match,\n    gap_manageability = EXCLUDED.gap_manageability,\n    role_fit = EXCLUDED.role_fit,\n    delivery_fit = EXCLUDED.delivery_fit,\n    growth_value = EXCLUDED.growth_value,\n    semantic_blockers = EXCLUDED.semantic_blockers,\n    uncertainty = EXCLUDED.uncertainty,\n    strengths = EXCLUDED.strengths,\n    skill_gaps = EXCLUDED.skill_gaps,\n    summary = EXCLUDED.summary,\n    total_score = EXCLUDED.total_score,\n    decision = EXCLUDED.decision,\n    evaluated_at = NOW()\nRETURNING *;",
+        "query": "INSERT INTO public.opportunity_ai_evaluations (\n    opportunity_id,\n    evaluation_version,\n    model_name,\n    prompt_version,\n    raw_response,\n    scope_status,\n    scope_confidence,\n    scope_reason,\n    task_relevance,\n    skill_match,\n    gap_manageability,\n    role_fit,\n    delivery_fit,\n    growth_value,\n    semantic_blockers,\n    uncertainty,\n    strengths,\n    skill_gaps,\n    summary,\n    total_score,\n    decision\n)\nVALUES (\n    $1,\n    'v1.8',\n    $2,\n    $3,\n    $4::jsonb,\n    $5,\n    $6,\n    $7,\n    $8,\n    $9,\n    $10,\n    $11,\n    $12,\n    $13,\n    $14::jsonb,\n    $15::jsonb,\n    $16::jsonb,\n    $17::jsonb,\n    $18,\n    $19,\n    $20\n)\nON CONFLICT (opportunity_id, evaluation_version)\nDO UPDATE SET\n    model_name = EXCLUDED.model_name,\n    prompt_version = EXCLUDED.prompt_version,\n    raw_response = EXCLUDED.raw_response,\n    scope_status = EXCLUDED.scope_status,\n    scope_confidence = EXCLUDED.scope_confidence,\n    scope_reason = EXCLUDED.scope_reason,\n    task_relevance = EXCLUDED.task_relevance,\n    skill_match = EXCLUDED.skill_match,\n    gap_manageability = EXCLUDED.gap_manageability,\n    role_fit = EXCLUDED.role_fit,\n    delivery_fit = EXCLUDED.delivery_fit,\n    growth_value = EXCLUDED.growth_value,\n    semantic_blockers = EXCLUDED.semantic_blockers,\n    uncertainty = EXCLUDED.uncertainty,\n    strengths = EXCLUDED.strengths,\n    skill_gaps = EXCLUDED.skill_gaps,\n    summary = EXCLUDED.summary,\n    total_score = EXCLUDED.total_score,\n    decision = EXCLUDED.decision,\n    evaluated_at = NOW()\nRETURNING *;",
         "options": {
-          "queryReplacement": "={{ [   $json.opportunity_id,   $json.scope_gate.status,   $json.scope_gate.confidence,   $json.scope_gate.reason,    $json.scores.task_relevance,   $json.scores.skill_match,   $json.scores.gap_manageability,   $json.scores.role_fit,   $json.scores.delivery_fit,   $json.scores.growth_value,    JSON.stringify($json.semantic_blockers),   JSON.stringify($json.uncertainty),   JSON.stringify($json.strengths),   JSON.stringify($json.skill_gaps),    $json.summary,   $json.total_score,   $json.decision ] }}"
+          "queryReplacement": "={{ [\n  $json.opportunity_id,\n  $json.model_name,\n  $json.prompt_version,\n  JSON.stringify($json.raw_response),\n  $json.scope_gate.status,\n  $json.scope_gate.confidence,\n  $json.scope_gate.reason,\n  $json.scores.task_relevance,\n  $json.scores.skill_match,\n  $json.scores.gap_manageability,\n  $json.scores.role_fit,\n  $json.scores.delivery_fit,\n  $json.scores.growth_value,\n  JSON.stringify($json.semantic_blockers),\n  JSON.stringify($json.uncertainty),\n  JSON.stringify($json.strengths),\n  JSON.stringify($json.skill_gaps),\n  $json.summary,\n  $json.total_score,\n  $json.decision\n] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -127,6 +128,20 @@
       ],
       "id": "094c9897-4edf-455b-8d49-4d069cee6910",
       "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const source = $('Execute a SQL query SELECT').item.json;\n\nconst errorMessage =\n  $json.error?.message ??\n  $json.message ??\n  $json.error ??\n  'AI evaluation failed or returned malformed output';\n\nreturn {\n  json: {\n    opportunity_id: String(source.id),\n\n    scope_gate: {\n      status: 'uncertain',\n      confidence: 'low',\n      reason: `AI evaluation could not be completed: ${errorMessage}`\n    },\n\n    scores: {\n      task_relevance: 0,\n      skill_match: 0,\n      gap_manageability: 0,\n      role_fit: 0,\n      delivery_fit: 0,\n      growth_value: 0\n    },\n\n    semantic_blockers: {},\n\n    uncertainty: {\n      significant: true,\n      items: [\n        'AI evaluation failed or returned malformed structured output'\n      ]\n    },\n\n    strengths: [],\n    skill_gaps: [],\n\n    summary: 'Manual review required because the AI evaluation could not be completed reliably.',\n\n    model_name: 'gpt-5-mini',\n    prompt_version: 'semantic_prompt_v1',\n\n    raw_response: {\n      evaluation_error: errorMessage\n    },\n\n    total_score: 0,\n    decision: 'REVIEW'\n  }\n};;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        128
+      ],
+      "id": "a1ac20fa-d588-4446-b373-06d73f99565b",
+      "name": "AI Evaluation Fallback → REVIEW"
     }
   ],
   "pinData": {},
@@ -172,6 +187,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "AI Evaluation Fallback → REVIEW",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -207,12 +229,24 @@
           }
         ]
       ]
+    },
+    "AI Evaluation Fallback → REVIEW": {
+      "main": [
+        [
+          {
+            "node": "Save AI Evaluation v1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "timezone": "UTC"
   },
   "nodeGroups": [],
   "tags": []
